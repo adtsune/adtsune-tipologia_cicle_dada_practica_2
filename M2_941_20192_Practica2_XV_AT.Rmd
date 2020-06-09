@@ -1,0 +1,887 @@
+---
+title: "M2.951 - TIPOLOGIA I CICLE DE VIDA DE LES DADES"
+subtitle: "Pràctica 2 - World Health Indicators Dataset"
+author: "Anna de la Torre Suñe, Xavier Ventura de los Ojos"
+date: "9/6/2020"
+dataset URL: "https://zenodo.org/record/3751704#.XtDFi8BS_IU"
+output:
+  pdf_document: 
+      toc: true
+      toc_depth: 3
+      df_print: "kable"
+  word_document: default
+  html_document: default
+header-includes:
+    - \usepackage{caption}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# Carreguem els paquets d'R que utilitzarem
+## install.packages("ggplot2")
+library(ggplot2)
+## install.packages("dplyr")
+library(dplyr)
+## install.packages("jtools")
+##library(jtools)
+## install.packages("epiR")
+##library(epiR)
+## install.packages("questionr")
+## library(questionr)
+## install.packages("summarytools")
+library(summarytools)
+## install.packages("kableExtra")
+library(kableExtra)
+## install.packages("DMwR")
+library(DMwR)
+# install.packages("VIM")
+library(VIM)
+# install.packages("missForest")
+library(missForest)
+# install.packages("tidyr")
+library(tidyr)
+# install.packages("tibble")
+library(tibble)
+# install.packages("DescTools")
+library(DescTools)
+# install.packages("corrplot")
+library(corrplot)
+#install.packages("Hmisc")
+library(Hmisc)
+#install.packages("jtools")
+library(jtools)
+```
+
+
+\pagebreak
+
+## 1 Descripció del dataset. Perquè és important i quina pregunta/problema pretén respondre?
+
+El dataset que analitzarem és el **World Health Indicators** que vàrem obtenir de les Nacions Unides i del Banc Mundial a la pràctica 1 - web scraping.
+El WHI està format per 572 files i 22 columnes i conté dades relacionades amb l'àmbit de la salut pública i dades socioeconòmiques referents a 194 països i regions del món dels anys 2005, 2010 i 2019 (*).
+
+El dataset té la següent estructura:
+
+* country_code – Codi ISO3 de país
+* country – Nom del país
+* year – Any
+* population – Població total
+* population_grow – Creixement de la població (% anual)
+* population_under_14 – Població d'edats entre els 0 – 14 anys (% de la població total)
+* population_above_65 – Població d'edats superior als 65 anys (% de la població total)
+* gdp - Producte Interior Brut (milions de dòlars actuals) – GDP per les seves sigles en anglès
+* gdp_growth_rate – Taxa de creixement del Producte Interior Brut (% anual a preus constants de 2010)
+* unemployment – Atur (% de població en edat laboral)
+* education_gov_expenditure – Despesa governamental en educació (% GDP)
+* health_expenditure – Despesa en salut (% GDP)
+* life_expectancy_fem – Esperança de vida, dones (anys)
+* life_expectancy_male – Esperança de vida, homes (anys)
+* non_commun_disease_death – Morts per malalties no transmissibles (% del total)
+* commun_disease_death – Morts per malalties transmissibles i condicions d'embaràs, prenatals i nutricionals (% del total)
+* tuberculosis – Incidència de tuberculosi (per cada 100.000 habitants)
+* hiv – Prevalença de VIH (en % de població d'edats entre els 15 i 49 anys) 
+* infant_mortality – Mortalitat infantil (per cada 1000 naixements amb vida) 
+* undernourishment – Prevalença de desnutrició (% població)
+* hospital_beds – Llits d'hospital (per cada 1000 habitants)
+* physicians – metges (per cada 1000 habitants)
+
+(*) En el cas del Banc Mundial, s'ha hagut d'assimilar les dades de 2018 a les de 2019 a l'espera que es publiquin les dades de 2019.
+
+
+Considerem que aquest és un dataset interessant que ens pot ajudar a entendre la situació sociosanitària de les diferents regions del món, determinar vulnerabilitats o zones de risc i per tant identificar on es fa més necessari actuar.
+S'analitzarà la correlació entre indicadors socioeconòmics i indicadors sanitaris, amb especial èmfasi en aquelles variables que afecten l'esperança de vida d'homes i dones. S'estudiarà amb detall les diferències en l'esperança de vida segons diferents rangs de despesa sanitària pública. Finalment s'implementarà un model de regressió que permeti predir l'esperança de vida en funció de diferents variables correlacionades.
+
+\pagebreak
+
+## 2 Integració i selecció de les dades d’interès a analitzar.
+
+En aquest cas no cal realitzar un procés d'integració de dades, ja que ja es va dur a terme en la Pràctica 1, de manera que partim d'un dataset que ja integra dades de diferents fonts. 
+
+Respecte a la selecció de dades, d'una banda s'eliminaran les columnes non_commun_disease_death, commun_disease_death, hospital_beds i undernourishment a causa de la important proporció de dades buides que contenen (veure secció 3.1), de manera que els tests i models que s'apliquin se sustentin en dades de major qualitat. I d'altra banda, gràcies als testos de correlació que s'aplicaran en la secció 4.3. observarem que necessitarem crear quatre noves variables calculades, que mostrin les variables gdp, gdp_growth_rate, education_gov_expenditure i health_expenditure per càpita. Si no es prenen els valors per càpita, s'observen correlacions molt febles entre les dades d'interès relacionades amb la salut dels habitants i les dades globals de gdp, gdp_growth_rate, education_gov_expenditure i health_expenditure pel conjunt del país. 
+
+
+Procedim ara a llegir les dades del fitxer "world_health_indicators.csv" i fem una anàlisi descriptiva de les variables d'interès.
+
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Carreguem el fitxer de dades world_health_indicators.csv
+health_data <- read.csv('world_health_indicators.csv', stringsAsFactors = F)
+health_rows=dim(health_data)[1]
+```
+
+
+Visualitzem les primeres files del dataset
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+kable(head(health_data[,c(1:7)],9),booktabs=T) %>% 
+  kable_styling(latex_options = c("striped", "scale_down","HOLD_position")) 
+
+kable(head(health_data[,c(1,3,8:11)],9),booktabs=T) %>% 
+  kable_styling(latex_options = c("striped", "scale_down","HOLD_position")) 
+
+kable(head(health_data[,c(1,3,12:16)],9),booktabs=T) %>% 
+  kable_styling(latex_options = c("striped", "scale_down","HOLD_position")) 
+
+kable(head(health_data[,c(1,3,17:22)],9),booktabs=T) %>% 
+  kable_styling(latex_options = c("striped", "scale_down","HOLD_position")) 
+```
+
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Verifiquem l'estructura del joc de dades
+str(health_data)
+```
+
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Convertim la variable gdp de "integer" a numèrica:
+health_data$gdp <- as.numeric(health_data$gdp)
+
+# Anàlisi estadístic descriptiu de health_data
+summary(health_data)
+```
+
+
+
+```{r eval=FALSE, results='asis',include=FALSE, warning=FALSE}
+st_options(lang="es")
+dfSummary(health_data,plain.ascii = FALSE, style="grid",valid.col=FALSE,na.col=FALSE)
+```
+
+\pagebreak
+
+## 3. Neteja de les dades.
+
+
+### 3.1. Les dades contenen zeros o elements buits? Com gestionaries aquests casos?
+
+
+#### Analitzem els casos de zeros
+
+Mostrem les files amb alguna columna amb valor 0.
+
+```{r buscar zeros}
+columnes <- colSums(health_data == 0,na.rm=TRUE) > 0
+columnes[c('country','year')] <- TRUE
+
+zeros <- health_data[rowSums(health_data == 0,na.rm = TRUE) > 0,columnes]
+```
+
+```{r mostrar zeros, echo=FALSE}
+# Mostrar la taula amb valors 0 del dataset
+zeros %>%  
+mutate_if(is.numeric, function(x) {
+    cell_spec(x,"latex", bold = (x==0),color = ifelse(x==0, "blue", "black"), align="r")
+  }) %>%
+kable("latex",booktabs=T,escape=F,linesep="",caption="Valors zero",
+      col.names=latexTranslate(names(zeros))) %>% 
+  kable_styling(latex_options = c("striped", "scale_down","HOLD_position")) 
+```
+
+
+Hi ha quatre casuístiques diferents:
+
+* Un valor 0 al creixement de la població de Polònia l'any 2019.
+
+```{r Poland 2019}
+
+health_data[health_data$country=="Poland",c('country','year',"population","population_grow")]
+
+```
+
+Observem que podria ser un valor correcte tenint en compte que la variació de la població entre els anys 2010 i 2019 a Polonia ha estat del `r (health_data[419,"population"] -health_data[418,"population"]) / health_data[418,"population"] * 100 `%.
+
+
+* Paisos amb GDP Growth Rate igual a 0
+
+```{r}
+cgdp0 <- health_data[health_data$gdp_growth_rate == 0,"country"]
+health_data[health_data$country %in% cgdp0,c('country','year',"gdp","gdp_growth_rate")]
+```
+
+Consultant altres fonts (tradingeconomics.com), corregim el valor del gdp_growth de Burundi per a l'any 2019 que va ser de 3.3.
+
+```{r fix gdp}
+health_data[health_data$country == "Burundi" & health_data$year == 2019,]$gdp_growth_rate <- 3.3
+```
+
+En el cas d'Espanya, el valor 0 per l'any 2010 és correcte.
+
+
+
+* Paisos amb 0 casos de tuberculosi per 100.000 habitants.
+
+
+```{r}
+ctry <- health_data[which(health_data$tuberculosis == 0),"country"]
+health_data[health_data$country %in% ctry,c("country","year","population","tuberculosis")]
+```
+
+Es tracta d'un terrori tant petit que és possible que aquest valor sigui correcte.
+
+
+* Països amb 0.0 metges per cada 1000 habitants
+
+```{r}
+ctry <- health_data[which(health_data$physicians == 0),"country"]
+health_data[health_data$country %in%
+        ctry,c('country','year',"health_expenditure","population","physicians")]
+
+```
+
+Segons la WHO, _Available statistics show that over 45% of WHO Member States report to have less than 1 physician per 1000 population_ això vol dir que aquests valors 0 poden ser correctes.
+
+
+
+#### Analitzem els casos amb elements buits.
+
+Sobre un total de `r nrow(health_data)` files, els casos amb valors buits (NA) són:
+
+```{r}
+# Estadístiques de valors buits
+vb <- colSums(is.na(health_data))
+kable(vb[vb>0],col.names="Valors buits")
+```
+
+\pagebreak
+Mostrem la proporció de valors buits de les diferents variables i les seves possibles combinacions pel dataset complert (anys 2005, 2010 i 2019).
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+
+health_miss <- health_data[, !(colnames(health_data) %in% c("country_code", "country"))]
+
+aggr(health_miss, numbers=T, sortVars=T, labels=names(health_miss), cex.axis=0.4, 
+     cex.lab=0.8, cex.numbers=0.1, prop=c(T,F))
+
+```
+
+En vista de la important proporció de buits existent a les columnes non_commun_disease_death, commun_disease_death, hospital_beds i undernourishment, que oscil·la entre el 43 i el 68%, decidim realitzar una selecció de les dades, eliminant aquestes columnes de l'estudi, de manera que els tests i models que realitzem es sustentin en dades de major qualitat. 
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+health_miss <- health_data[, !(colnames(health_data) %in% c("country_code", "country",
+  "non_commun_disease_death", "commun_disease_death", "hospital_beds", 
+  "undernourishment"))]
+
+aggr(health_miss, numbers=T, sortVars=T, labels=names(health_miss), cex.axis=0.4,
+     cex.lab=1, cex.numbers=0.5, prop=c(T,F))
+```
+
+
+Un cop fet això, implementarem el mètode *missForest* per imputar valors buits a la resta de columnes del dataset.
+
+```{r echo=TRUE, message=FALSE, warning=FALSE, results = 'hide'}
+# missForest
+missForest.imp <- missForest(health_miss, variablewise=T)
+
+```
+
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Conservem el dataframe original canviant-li el nom a health_data_na.
+health_data_na <- health_data
+
+# Construim ara el dataframe de treball amb les dades imputades gràcies a aplicar el
+# mètode MissForest, utilitzant per a aquest el nom de health_data:
+
+health_data <- data.frame(health_data[, c("country_code", "country")], missForest.imp$ximp)
+
+# Verifiquem que efectivament el mètode missForest ha omplert els valors buits.
+colSums(is.na(health_data))
+
+# Anàlisi estadístic descriptiu de health_data desprès d'aplicar MissForest
+summary(health_data)
+```
+
+
+### 3.2. Identificació i tractament de valors extrems.
+
+Mostrem dos gràfics de boxplot per cada variable, un amb la variable no transformada i l'altre gràfic aplicant una transformació de la variable amb el logaritme natural, per tal d'identificar els valors extrems. Analitzarem posteriorment els valors extrems tenint en compte el logaritme natural.
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Boxplot de les variables per l'anàlisi de valors extrems
+
+par(mfrow=c(1, 2))
+for (i in 4:ncol(health_data)) {
+  if (is.numeric(health_data[, i])){
+  boxplot(health_data[, i], main = colnames(health_data)[i], width=100)
+  boxplot(log(health_data[, i]), main =paste("log(", colnames(health_data)[i],")"),
+          width=100)
+  cat("  \n  \n")
+  }
+}
+```
+
+Llistem els outliers que s'obtenen a partir de la transformació logarítmica. Amb aquesta transformació aconseguim reduir el nombre de dades que es consideren outliers, per tal d'analitzar-ne la seva validesa.
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Mostrem outliers considerant la transformació logarítmica. 
+
+log_outliers <- function(x) {
+  var_b <- boxplot.stats(log(x))
+  log(x) %in% var_b$out
+}
+
+out_list <- lapply(4:ncol(health_data), function (i, df){
+  df[log_outliers(df[,i])==T, c(1,2,3,i)]
+}, df=health_data)
+
+```
+
+```{r mostrar ouliers, echo=FALSE, results="asis"}
+# Generar taules per mostrar els outliers
+
+for (i in seq_along(out_list)) {
+  if (nrow(out_list[[i]]) > 0) {
+    cat("\\captionsetup[table]{labelformat=empty}")
+    print(kable(out_list[[i]],booktabs=T,caption="valors extrems") %>% 
+    kable_styling(latex_options = c("striped","HOLD_position")) )
+  }
+}
+```
+
+
+
+Analitzant els valors dels outliers, veiem que la majoria són valors legítims, excepte un valor que es mostra a continuació, que és un error provinent de la font de dades des de la que es va fer web scraping. El que farem és substituir aquest outlier no legítim cercant una font fiable (https://tradingeconomics.com/libya/gdp-growth-annual) i introduint manualment la dada correcta.
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+
+health_data$gdp_growth_rate[health_data$country == "Libya" & health_data$year == "2019"] <- 4.0
+
+```
+
+\pagebreak
+
+## 4. Anàlisi de les dades.
+
+### 4.1. Selecció dels grups de dades que es volen analitzar/comparar (planificació dels anàlisis a aplicar).
+
+D'una banda, els grups de dades que interessa comparar són directament les diferents columnes del dataset entre elles, ja que l'objectiu d'aquest estudi és trobar correlacions entre els indicadors socioeconòmics dels països i els indicadors de salut pública que afecten la població, per tal de construir un model que pugui predir l'impacte en l'esperança de vida de la població segons diferents variables.
+
+D'altra banda, també compararem les dades del dataframe agrupades en 5 grups diferents segons el nivell de despesa sanitària pública per càpita.
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+
+# Creem quatre noves variables calculades, que mostrin les variables gdp, gdp_growth_rate,
+# education_gov_expenditure, i health_expenditure per càpita:
+
+health_data$gdp_capita <- (health_data$gdp / health_data$population) * 1e6
+
+health_data$gdp_growth_capita <- 
+  ((health_data$gdp_growth_rate / 100) * health_data$gdp * 1e6) / 
+  health_data$population
+
+health_data$educ_exp_capita <- 
+  ((health_data$education_gov_expenditure/100) * health_data$gdp * 1e6) / 
+  health_data$population
+
+health_data$health_exp_capita <- 
+  ((health_data$health_expenditure/100) * health_data$gdp * 1e6) / health_data$population
+
+summary(health_data)
+
+```
+
+Establirem diferents categories de dades segons la despesa sanitària pública. 
+Per això es crea una nova variable que representa el tram de despesa sanitària pública. Es calcula prenent igual freqüència d'ocurrència en cada tram per crear un total de 5 intervals.
+
+```{r warning=FALSE }
+
+health_data$health_expend_category <- cut2(health_data$health_exp_capita, g=5)
+
+health_data[1:20,c("country_code", "country", "health_expend_category")]
+```
+
+```{r warning=FALSE }
+# Convertim aquests intervals en nivells categòrics
+levels(health_data$health_expend_category) <- c("very low", "low", "medium", "high", "very high")
+
+# Creem subgrups
+cat_very_low_fem <- 
+  health_data$life_expectancy_fem[health_data$health_expend_category=="very low"]
+cat_low_fem <- 
+  health_data$life_expectancy_fem[health_data$health_expend_category=="low"]
+cat_medium_fem <- 
+  health_data$life_expectancy_fem[health_data$health_expend_category=="medium"]
+cat_high_fem <- 
+  health_data$life_expectancy_fem[health_data$health_expend_category=="high"]
+cat_very_high_fem <- 
+  health_data$life_expectancy_fem[health_data$health_expend_category=="very high"]
+
+cat_very_low_male <- 
+  health_data$life_expectancy_male[health_data$health_expend_category=="very low"]
+cat_low_male <- 
+  health_data$life_expectancy_male[health_data$health_expend_category=="low"]
+cat_medium_male <- 
+  health_data$life_expectancy_male[health_data$health_expend_category=="medium"]
+cat_high_male <- 
+  health_data$life_expectancy_male[health_data$health_expend_category=="high"]
+cat_very_high_male <- 
+  health_data$life_expectancy_male[health_data$health_expend_category=="very high"]
+```
+
+
+
+### 4.2. Comprovació de la normalitat i homogeneïtat de la variància.
+
+
+#### Comprovació de la normalitat de les variables del dataset
+
+Comprovem amb proves estadístiques la no normalitat de cadascuna de les variables de health_data. Utilitzarem la prova de Shapiro-Wilk, mitjançant la funció shapiro.test().
+
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+lshap <- sapply(health_data[, !(colnames(health_data) %in% c("country_code", "country", "year",
+  "health_expend_category"))], shapiro.test)
+```
+
+```{r echo=FALSE}
+# mostrar el resultat dels test en forma de taula
+(as.data.frame(t(lshap[1:2,])))
+```
+
+
+
+La prova de Shapiro-Wilk dona com a resultat un p-valor menor al nivell de significació alpha = 0.05 per a cadascuna de les variables numèriques del dataset, per tant, es rebutja la hipòtesi nul·la i es conclou que cap de les variables segueix una distribució normal de manera significativa.
+
+Intentem ara aplicar alguna transformació a les dades per veure si podem així obtenir una normalització, amb la intenció d'aplicar testos paramètrics posteriorment a les variables transformades:
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Transformació de Box-Cox
+
+for (i in 4:ncol(health_data)) {
+  if (is.numeric(health_data[, i])){
+  x <- health_data[, i]
+  bxcx <- BoxCox(x, lambda=BoxCoxLambda(x))
+  
+  shapiro.test(bxcx)
+  
+  par(mfrow=c(2,2))
+
+  # Gràfica Q-Q per Fare sense transformat
+  qqnorm(x, main=colnames(health_data)[i])
+  qqline(x, col=2)
+
+  # Gràfica Q-Q per Fare transformat
+  qqnorm(bxcx, main="x Box_Cox")
+  qqline(bxcx, col=2)
+
+  hist(x, main=colnames(health_data)[i])
+  hist(bxcx, main="x Box_Cox")
+  par(mfrow=c(1,1))
+  
+  }
+}
+
+```
+
+
+Observant els gràfics resultats, s'intueix que les variables no semblen seguir una distribució normal, ja que els quantils de la mostra s'allunyen dels quantils teòrics de la distribució normal i els histogrames no semblen adaptar-se a una distribució normal en la majoria de casos.
+
+Apliquem el test de Shapiro a totes les variables transformades per veure si alguna segueix una distribució normal un cop aplicada la transformació Box-Cox:
+
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+
+test_box_cox <- function(x){
+  tryCatch({
+    y <- (BoxCox(x,lambda=BoxCoxLambda(x)))
+    shapiro.test(y)
+  }, error=function(cond) {
+      return(NA)})
+}
+
+lshap <- sapply(health_data[,4:ncol(health_data)], test_box_cox)
+
+lshap.df <-  as.data.frame(sapply(lshap[!is.na(lshap)], function(x) {as.character(x$p.value)}))
+colnames(lshap.df) <- c("p-value")
+
+lshap.df
+
+```
+
+
+La prova de Shapiro-Wilk dona com a resultat un p-valor menor al nivell de significació alpha = 0.05 i es rebutja la hipòtesi nul·la. Podem concloure que la transformació de Box-Cox no ens permet obtenir distribucions normals de les variables transformades.
+
+Provem d'aplicar altres transformacions, com ara una transformació amb logaritme natural ln(x+1) a aquelles variables que no prenen valors negatius.
+
+```{r eval=FALSE, message=TRUE, warning=FALSE, include=FALSE}
+# Transformació amb logaritme natural ln(x+1)
+# Apliquem de nou la prova de Shapiro-Wilk 
+
+alpha <- 0.05
+col.names = colnames(health_data)
+
+for (i in 1:ncol(health_data)) {
+  if (is.numeric(health_data[,i])) {
+
+    p_val <- shapiro.test(log(health_data[,i] + 1))$p.value
+  
+    if (p_val < alpha) {
+      cat(col.names[i], ": p-valor = ", p_val, " < alpha --- NO segueix Distribucio Normal.", "\n\n")
+    } else {
+      cat(col.names[i], ": p-valor = ", p_val, " >= alpha --- Distribucio Normal.", "\n\n")
+    }
+  }
+  }
+```
+
+
+
+```{r echo=TRUE, message=TRUE, warning=FALSE}
+# Transformació amb logaritme natural ln(x+1)
+# Apliquem de nou la prova de Shapiro-Wilk 
+
+alpha <- 0.05
+col.names = colnames(health_data)
+
+df1 <- data.frame()
+
+for (i in 1:ncol(health_data)) {
+  if (is.numeric(health_data[,i])) {
+
+    p_val <- shapiro.test(log(health_data[,i] + 1))$p.value
+  
+    df1 <- rbind(df1,data.frame(variable = col.names[i],p.value = p_val))
+    
+  }
+}
+
+```
+\captionsetup[table]{labelformat=empty}
+``` {r echo=FALSE}
+df1 %>% mutate(
+  variable = cell_spec(variable,bold=(p.value > alpha)),
+  p.value=cell_spec(p.value,"latex", color = ifelse(p.value > alpha, "blue", "black"))
+  ) %>% 
+  select(variable,p.value) %>% 
+  kable("latex",caption="transformació logaritme natural ln(x+1)",escape=F,booktabs=T,linesep="") %>%
+  kable_styling(latex_options = c("striped","center", "HOLD_position"))
+```
+
+
+
+
+Veiem que la transformació amb ln(x+1) només permet obtenir una distribució normal per **unemployment**, però aquesta és una variable que es relaciona poc amb les variables de salut d'interès, com veurem mitjançant els testos de correlació.
+
+Per últim, provem les transformacions $x^2$ $x^{0.5}$ $\frac {1} {x}$
+
+
+```{r echo=TRUE, message=TRUE, warning=FALSE}
+# Transformacions amb x^2, x^0.5 i 1/x
+# Apliquem de nou la prova de Shapiro-Wilk 
+
+alpha <- 0.05
+col.names = colnames(health_data)
+
+df1 <- data.frame()
+
+for (i in 4:ncol(health_data)) {
+  if (is.numeric(health_data[,i])) {
+
+    p_val_2 = shapiro.test((health_data[,i])^2)$p.value
+    p_val_05 = shapiro.test((health_data[,i])^0.5)$p.value
+    p_val_frac = shapiro.test(1/(health_data[,i]))$p.value
+
+
+    df1 <- rbind(df1,data.frame(variable = col.names[i],p.valor2 = p_val_2,
+                                p.valor05 = p_val_05,p.valorfrac = p_val_frac))
+    
+    
+  }
+}
+
+```
+\captionsetup[table]{labelformat=empty}
+``` {r echo=FALSE}
+# Mostrar la taula amb els resultats dels test Shapiro
+
+df1 %>% mutate(
+  variable = cell_spec(variable,bold=(p.valor2 >alpha | p.valor05 > alpha)),
+  p.valor2 = cell_spec(p.valor2,"latex", color = ifelse(p.valor2 > alpha, "blue", "black")),
+  p.valor05 = cell_spec(p.valor05,"latex", color = ifelse(p.valor05 > alpha, "blue", "black")),
+  p.valorfrac = cell_spec(p.valorfrac,"latex", color = ifelse(!is.na(p.valorfrac) & p.valorfrac > alpha, "blue", "black"))
+) %>% select(variable,p.valor2,p.valor05,p.valorfrac) %>% kable("latex",
+  caption="transformacions $x^2$, $x^{0.5}$ i $\\frac {1} {x}$ (p-valor)", col.names = c("","$x^2$","$x^{0.5}$","$\\frac {1} {x}$"), escape=F,booktabs=T,linesep="") %>%
+  kable_styling(latex_options = c("striped","center", "HOLD_position"))
+```
+
+Les transformacions $x^2$ i $\frac 1 x$ tampoc no ens permeten obtenir distribucions normals de les variables transformades, i amb $x^{0.5}$ només es podria normalitzar __health_expenditure__.
+
+Per tant, haurem de considerar que les variables no segueixen una distribució normal, ni tan sols transformades, de manera que haurem d'aplicar tests no paramètrics.
+
+
+
+#### Comprovació de la normalitat de les variables life_expectancy_fem/male segons les categories de despesa sanitària.
+
+Comprovem amb la prova de Shapiro-Wilk la normalitat de la variable life_expectancy per cada grup.
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+
+shapiro.test(cat_very_low_fem)
+shapiro.test(cat_low_fem)
+shapiro.test(cat_medium_fem)
+shapiro.test(cat_high_fem)
+shapiro.test(cat_very_high_fem)
+
+shapiro.test(cat_very_low_male)
+shapiro.test(cat_low_male)
+shapiro.test(cat_medium_male)
+shapiro.test(cat_high_male)
+shapiro.test(cat_very_high_male)
+
+```
+
+La prova de Shapiro-Wilk dona com a resultat un p-valor major al nivell de significació alpha = 0.05 pels subgrups cat_very_low_fem i cat_very_low_male, de manera que es pot considerar que segueixen una distribució normal. Però la resta de subgrups no segueixen una distribució normal. Per tant, si fem comparacions entre la totalitat dels grups haurem de considerar proves no paramètriques.
+
+
+#### Comprovació de la homoscedasticitat entre les variables life_expectancy_fem/male segons les categories de despesa sanitària.
+
+Per comprovar la homoscedasticitat entre diversos grups de dades, atès que les dades no compleixen la condició de normalitat, apliquem proves no paramètriques:
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Comprovació de homoscedasticitat entre les variables life_expectancy_fem i 
+# life_expectancy_male segons els diferents grups de despesa sanitària pública.
+
+fligner.test(life_expectancy_fem ~ health_expend_category, data=health_data)
+fligner.test(life_expectancy_male ~ health_expend_category, data=health_data)
+```
+
+Del test de Fligner-Killeen obtenim un p_valor < 0.05, de manera que es conclou que les variables life_expectancy_fem i life_expectancy_male presenten variànces estadísticament diferents segons els diferents grups de despesa sanitària pública.
+
+
+
+### 4.3. Aplicació de proves estadístiques per comparar els grups de dades. En funció de les dades i de l’objectiu de l’estudi, aplicar proves de contrast d’hipòtesis, correlacions, regressions, etc. Aplicar almenys tres mètodes d’anàlisi diferents.
+
+
+#### Comparació entre distribucions de les variables life_expectancy_fem/male entre els diferents grups segons despesa pública sanitària per càpita.
+
+Un cop comprovat que les variables no cumpleixen les suposicions per l'aplicació de tests paramètrics a la secció 4.2, s'implementa el test de Wilcoxon per comprovar la similitud de distribucions entre alguns dels grups, dos a dos.
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+wilcox.test(life_expectancy_fem ~ health_expend_category, data=health_data,
+            subset=health_expend_category %in% c("very low", "low"))
+
+wilcox.test(life_expectancy_male ~ health_expend_category, data=health_data,
+            subset=health_expend_category %in% c("very low", "low"))
+
+wilcox.test(life_expectancy_fem ~ health_expend_category, data=health_data,
+            subset=health_expend_category %in% c("high", "very high"))
+
+wilcox.test(life_expectancy_male ~ health_expend_category, data=health_data,
+            subset=health_expend_category %in% c("high", "very high"))
+```
+
+Amb el test de Krustal_Wallis comprovarem la similitud de distribucions entre tots els grups.
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+kruskal.test(life_expectancy_fem ~ health_expend_category, data=health_data)
+kruskal.test(life_expectancy_male ~ health_expend_category, data=health_data)
+```
+
+S'observa doncs una diferència estadísticament significativa entre les distribucions d'esperança de vida per diferents rangs de despesa sanitària pública.  La mitja de l'esperança de vida és notablement major quan major és la despesa sanitària pública, i la variància es redueix, fent disminuir la dispersió de l'esperança de vida entre individus.
+
+Observem que es podria fer una anàlisi en més profunditat si a part dels 5 grups creats segons el rang de despesa sanitària per cada sexe, també apliquéssim alhora una divisió segons els 3 anys dels quals tenim dades (2005, 2010 i 2019). Amb això es podria comprovar si cadascun dels grups segons despesa i sexe ha patit algun tipus d'evolució durant els 3 anys, o bé si l'esperança de vida ha quedat estancada.
+
+
+#### Comprovació de la correlació entre variables del dataset - Test de correlació
+
+A la secció 4.2 hem comprovat que cap de les variables del dataset segueix una distribució normal, de manera que basarem l'anàlisi de correlacions en el mètode de Spearman, que és un mètode no paramètric:
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+corr_matrix <- rcorr(as.matrix(health_data[, !(colnames(health_data) %in% c("country_code",
+      "country", "year", "health_expend_category"))]), type="spearman")
+
+# En millorem la seva visualització
+flat_cor_mat <- function(cor_r, cor_p){
+  cor_r <- rownames_to_column(as.data.frame(cor_r), var = "row")
+  cor_r <- gather(cor_r, column, cor, -1)
+  cor_p <- rownames_to_column(as.data.frame(cor_p), var = "row")
+  cor_p <- gather(cor_p, column, p, -1)
+  cor_p_matrix <- left_join(cor_r, cor_p, by = c("row", "column"))
+  cor_p_matrix
+}
+
+corr_matrix_flat <- flat_cor_mat(corr_matrix$r, corr_matrix$P)
+
+```
+
+```{r eval=FALSE, include=FALSE}
+kable(corr_matrix_flat,"latex", longtable = T, booktabs = T) %>%
+  kable_styling(latex_options = c("repeat_header","striped"))
+```
+
+
+Per aquelles relacions entre parells de variables on el p-valor és menor que el nivell de significació alpha = 0.05, l'hipòtesi nul·la és rebutjada i per tant es pot afirmar que el coeficient de correlació és significativament diferent de 0, i per tant, existeix una certa correlació entre els parells de variables, i aquest nivell de correlació es descriu mitjançant el coeficient de correlació obtingut.
+
+Filtrem doncs la taula de correlacions en funció de si el p-valor és inferior a 0.05 i a la vegada si el coeficient de correlació és major a 0.7 o menor a -0.7, per tal d'obtenir un cert nivell mínim de correlació entre parells de variables:
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Parells de variables on el p-valor és inferior a 0.05 i el coefficient de correlació 
+# és major a 0.7 o menor a -0.7.
+
+corr_matrix_filtered <- corr_matrix_flat[which((corr_matrix_flat$p < 0.05) & 
+                    ((corr_matrix_flat$cor >= 0.7) | (corr_matrix_flat$cor <= -0.7))),]
+
+
+```
+
+```{r echo=FALSE}
+kable(corr_matrix_filtered,"latex", longtable = T, booktabs = T) %>%
+  kable_styling(latex_options = c("repeat_header","striped"))
+
+```
+
+
+D'aquesta anàlisi obtenim diferents correlacions d'interès, que queden descrites a la secció 6.
+
+Entre elles, veiem que existeix una relació significativa entre major health_exp_capita, educ_exp_capita i physicians, i una major life_expectancy_fem/male. I a major proporció de population_under_14 i infant_mortality, menor life_expectancy_fem.
+
+
+
+#### Model de Regressió
+
+Analitzar aquestes correlacions ens permet implementar un model de regressió, que permeti estimar el life_expectancy_fem en funció de nous valors per les variables "physicians", "health_exp_capita" i "infant_mortality" (que són variables sobre les que els governs poden actuar directament).
+
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+plot(health_data$life_expectancy_fem, health_data$health_exp_capita)
+plot(health_data$life_expectancy_fem, health_data$physicians)
+plot(health_data$life_expectancy_fem, health_data$infant_mortality)
+
+health_exp_cap = health_data$health_exp_capita
+physn = health_data$physicians
+inf_mort = health_data$infant_mortality
+
+# Variable a predir:
+life_exp_fem = health_data$life_expectancy_fem
+
+ml <- lm(life_exp_fem ~ 
+             health_exp_cap
+           + physn 
+           + I(physn^2)
+           + inf_mort
+         , data=health_data)
+summary(ml)
+```
+S'obté un model amb un coeficient de determinació R^2 de 0.9109, cosa que podem considerar acceptable.
+
+Aquest model permet predir l'esperança de vida femenina establint nous valors per les variables "health_exp_capita", "physicians" i "infant_mortality".
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Indicadors de partida
+newdata <- data.frame(
+  health_exp_cap = 250,
+  physn = 1.2,
+  inf_mort = 19
+  )
+
+# Predicció de life_expectancy_fem
+predict(ml, newdata)
+```
+
+Amb aquest model podem observar com amb lleus millores dels 3 paràmetres "health_exp_capita", "physicians" i "infant_mortality", s'obtenen ràpidament millores notables en l'esperança de vida femenina. Per exemple, en la predicció feta anteriorment observem que fixant valors d'aquests paràmetres propers a les medianes de cada variable en qüestió, obtenim una esperança de vida superior a la mediana (75.48734 years > median(life_expectancy_fem) = 72.70 years). 
+Degut a que l'esperança de vida masculina té una elevada correlació amb la femenina, es comprovaria el mateix efecte si analitzessim un model per life_expectancy_male.
+
+\pagebreak
+
+## 5 Representació dels resultats a partir de taules i gràfiques.
+
+
+### Histogrames de Life expectancy en funció del rang de despesa sanitària pública
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+par(mfrow=c(2,3))
+hist(cat_very_low_fem, breaks=5, col="red")
+hist(cat_low_fem, breaks=5, col="orange")
+hist(cat_medium_fem, breaks=5, col="yellow")
+hist(cat_high_fem, breaks=5, col="blue")
+hist(cat_very_high_fem, breaks=5, col="green")
+par(mfrow=c(2,3))
+hist(cat_very_low_male, breaks=5, col="red")
+hist(cat_low_male, breaks=5, col="orange")
+hist(cat_medium_male, breaks=5, col="yellow")
+hist(cat_high_male, breaks=5, col="blue")
+hist(cat_very_high_male, breaks=5, col="green")
+par(mfrow=c(1,1))
+
+```
+
+Gràcies als testos estadístics s'ha observat una diferència estadísticament significativa entre les distribucions d'esperança de vida per diferents rangs de despesa sanitària pública. La mitja de l'esperança de vida és notablement major quan major és la despesa sanitària pública, i la variància es redueix, fent disminuir la dispersió de l'esperança de vida entre individus.
+
+\pagebreak
+
+### Visualització dels coeficients de correlació entre les variables del dataset (no agrupades)
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Visualitzem els coeficients de correlació entre variables del dataset, marcant els
+# resultats del p-valor:
+
+corrplot(corr_matrix$r, method = "color",  
+         type = "upper",order = "hclust",
+         addCoef.col = "black", 
+         tl.col = "black", tl.srt = 45, 
+         p.mat = corr_matrix$P, sig.level=0.05,  
+         diag = FALSE, tl.cex=0.55, number.cex=0.5
+         )
+```
+
+Les correlacions observades es descriuen a la secció 6.
+
+\pagebreak
+
+#### Model de Regressió - Estimació de Life expectancy
+
+Mostrem la gràfica del model de regressió tenint en compte únicament el terme amb major grau del polinomi obtingut, en aquest cas, health_data$physicians:
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+ggplot(data=health_data, aes(x=health_data$life_expectancy_fem, y=health_data$physicians,
+       color=health_data$infant_mortality)) + geom_point(color="blue", alpha=0.5) +
+       stat_smooth(method='lm', formula = y~poly(x,2), colour="red")
+
+```
+
+
+\pagebreak
+
+## 6 Resolució del problema. A partir dels resultats obtinguts, quines són les conclusions? Els resultats permeten respondre al problema?
+
+Gràcies a l'anàlisi de les dades d'esperança de vida segons el rang de despesa sanitària pública, hem pogut comprovar que existeix una diferència estadísticament significativa entre les distribucions segons aquests rangs de despesa. No només la mitja de l'esperança de vida és notablement major quan major és la despesa sanitària pública, sinó que a mesura que la despesa augmenta, la variància de l'esperança de vida es redueix. A efectes pràctics, això significa una menor dispersió del valor d'esperança de vida entre la població de països amb major despesa sanitària, i per tant una menor desigualtat en anys viscuts pels individus, cosa que podria traduir-se en una qualitat de vida més homogènia i igualitària entre la població.
+
+
+De l'anàlisi mitjançant el test de correlació hem identificat diferents correlacions d'interès entre variables:
+
+  - La població total i el gdp total no semblen relacionar-se significativament amb la resta de variables analitzades. És a dir, a priori viure en un país més o menys poblat o amb més o menys gdp total no és un indicador de millors o pitjors condicions de salut.
+  
+  - Les dades globals de gdp, gdp_growth_rate, education_gov_expenditure i health_expenditure tenen coeficients de correlació baixos en relació amb la resta de variables del dataset, però en canvi existeixen coeficients més elevats en el cas d'aquestes variables considerades per càpita.
+
+- Existeix una relació significativa entre major health_exp_capita, educ_exp_capita i physicians, i una major life_expectancy_fem/male. I a major proporció de population_under_14 i infant_mortality, menor life_expectancy_fem.
+
+- Existeix una relació significativa entre major gdp_capita, health_exp_capita, educ_exp_capita i physicians, i menor infant_mortality. Tanmateix, a major prevalença de tuberculosi, major infant_mortality.
+
+- La prevalença de tuberculosi es relaciona més fortament amb la reducció de l'esperança de vida que la prevalença de VIH. Això es pot deure al fet que per la tuberculosi existeix un tractament efectiu, però els països amb menor esperança de vida (i alhora amb menys recursos econòmics) tenen més dificultats d'accés a aquest tractament comparat amb els països amb major esperança de vida (desenvolupats), i alhora, al fet que ni els països desenvolupats ni els no desenvolupats encara no disposen d'una cura per l'VIH.
+
+
+Aquesta anàlisi de correlacions ens permet establir models de regressió. En aquest cas hem optat per implementar un model de regressió que permeti estimar l'esperança de vida femenina segons 3 paràmetres d'entrada: "health_exp_capita", "physicians" i "infant_mortality", que són variables sobre les que cada govern pot realitzar actuacions de millora. Analitzant el model podem concloure que lleus increments en despesa sanitària pública, nombre de metges i en l'aplicació de mesures per la reducció de la mortalitat infantil produirien notables increments en l'esperança de vida de la població, cosa que reduiria la desigualtat en qualitat de vida entre territoris.
+
+
+\pagebreak
+
+
+```{r}
+# Generació del fitxer CSV final
+
+  write.csv(health_data,"world_health_indicators_final.csv",
+            row.names = FALSE, quote=FALSE,na="")
+
+```
+
+## Contribucions
+
+Contribucions             Firma
+-----------------------  ----------
+Investigació prèvia       ADS,XVD
+Redacció de les respostes ADS,XVD
+Desenvolupament codi      ADS,XVD
+
+

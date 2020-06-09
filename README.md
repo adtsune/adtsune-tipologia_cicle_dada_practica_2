@@ -52,7 +52,7 @@ analitzat.
 
 - **world_health_indicators.csv** - Fitxer amb el dataset original.
 
-- **world_health_indicators_final.csv** - Fitxer generat per M2_941_20192_Practica2_XV_AT.Rmd el dataset final analitzat.
+- **world_health_indicators_final.csv** - Fitxer amb el dataset final analitzat (generat per M2_941_20192_Practica2_XV_AT.Rmd).
 
 
 ## Referències
